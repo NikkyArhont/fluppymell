@@ -74,7 +74,7 @@ function drawPipes() {
   ctx.fillStyle = '#2ecc71';
   pipes.forEach(p => {
     ctx.fillRect(p.x, 0, 60, p.top);
-    ctx.fillRect(p.x, p.top + p., 60, canvas.height);
+    ctx.fillRect(p.x, p.top + p.gap, 60, canvas.height);
   });
 }
 
@@ -94,7 +94,7 @@ function update() {
 
   if (frame % 100 === 0) {
     const top = Math.random() * (canvas.height / 2);
-    pipes.push({ x: canvas.width, top, gap: 230, passed: false });
+    pipes.push({ x: canvas.width, top, gap: 350, passed: false });
   }
 
   // спаун бонусов чаще для ❤️ и 💵
@@ -210,6 +210,7 @@ loop();
 </script>
 </body>
 </html>
+
 
 
 
