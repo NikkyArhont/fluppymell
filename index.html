@@ -88,8 +88,8 @@ function drawItems() {
 function update() {
   if (gameOver) return;
   frame++;
-  bird.vy += bird.gravity * 0.4;
-  bird.y += bird.vy * 0.4;
+  bird.vy += bird.gravity * 0.5;
+  bird.y += bird.vy * 0.5;
   if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
 
   if (frame % 100 === 0) {
@@ -120,7 +120,7 @@ function update() {
     items.push({ x, y, icon: type, type, collected: false });
   }
 
-  const pipeSpeed = 3.2;
+  const pipeSpeed = 1.6;
   pipes.forEach(p => (p.x -= pipeSpeed));
   items.forEach(i => (i.x -= pipeSpeed));
   pipes = pipes.filter(p => p.x > -70);
@@ -210,3 +210,4 @@ loop();
 </script>
 </body>
 </html>
+
