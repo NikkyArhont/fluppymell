@@ -29,7 +29,8 @@ let score = 0;
 let best = 0;
 let gameOver = false;
 let shield = false;
-
+let lastTime = performance.now();
+  
 const imgHero = new Image();
 imgHero.crossOrigin = 'anonymous';
 let heroReady = false;
@@ -84,12 +85,24 @@ function drawItems() {
   ctx.textAlign = 'center';
   items.forEach(it => ctx.fillText(it.icon, it.x, it.y));
 }
+function loop() {
+  const now = performance.now();
+  const dt = (now - lastTime) / 16.67; // 16.67 мс ≈ 60 кадров/с
+  lastTime = now;
 
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  if (gameOver) return;
+  
 function update() {
   if (gameOver) return;
   frame++;
-  bird.vy += bird.gravity * 0.6;
-  bird.y += bird.vy * 0.6;
+  bird.vy += bird.gravity * dt;
+  bird.y += bird.vy * dt;
   if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
 
   if (frame % 100 === 0) {
@@ -120,7 +133,7 @@ function update() {
     items.push({ x, y, icon: type, type, collected: false });
   }
 
-  const pipeSpeed = 3.2;
+  const pipeSpeed = 3.2 * dt;
   pipes.forEach(p => (p.x -= pipeSpeed));
   items.forEach(i => (i.x -= pipeSpeed));
   pipes = pipes.filter(p => p.x > -70);
@@ -210,4 +223,5 @@ loop();
 </script>
 </body>
 </html>
+
 
