@@ -88,8 +88,8 @@ function drawItems() {
 function update() {
   if (gameOver) return;
   frame++;
-  bird.vy += bird.gravity;
-  bird.y += bird.vy;
+  bird.vy += bird.gravity * 0.6;
+  bird.y += bird.vy * 0.6;
   if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
 
   if (frame % 100 === 0) {
@@ -210,3 +210,4 @@ loop();
 </script>
 </body>
 </html>
+
