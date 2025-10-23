@@ -85,11 +85,11 @@ function drawItems() {
   items.forEach(it => ctx.fillText(it.icon, it.x, it.y));
 }
 
-function update(dt = 1) {
+function update() {
   if (gameOver) return;
   frame++;
-  bird.vy += bird.gravity * dt;
-  bird.y += bird.vy 8 dt;
+  bird.vy += bird.gravity;
+  bird.y += bird.vy;
   if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
 
   if (frame % 100 === 0) {
@@ -183,14 +183,7 @@ function draw() {
 
 function endGame() { gameOver = true; best = Math.max(best, score); }
 
-let last = performance.now();
-function loop(now = performance.now()) {
-  const dt = (now - last) / 16.666; // нормализуем под 60 FPS
-  last = now;
-  update(dt);
-  draw();
-  requestAnimationFrame(loop);
-}
+function loop() { update(); draw(); requestAnimationFrame(loop); }
 
 let interacted = false;
 function primeAudio() {
@@ -217,4 +210,3 @@ loop();
 </script>
 </body>
 </html>
-
