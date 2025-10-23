@@ -1,3 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Flappy Hero — с картинкой и звуками (фикс загрузки изображения)</title>
+<style>
+  :root{--sky1:#87CEEB;--sky2:#5aa9d6}
+  body { margin: 0; background: linear-gradient(var(--sky1), var(--sky2)); overflow: hidden; }
+  canvas { display: block; margin: 0 auto; background: linear-gradient(var(--sky1), var(--sky2)); }
+  .diag { position: fixed; left: 10px; bottom: 10px; font: 12px system-ui; color: #fff; background: rgba(0,0,0,.35); padding: 6px 8px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="diag" class="diag" style="display:none"></div>
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -8,20 +24,12 @@ window.addEventListener('resize', resize, { passive: true });
 let bird = { x: 100, y: 250, vy: 0, size: 20, gravity: 0.5, lift: -8 };
 let pipes = [];
 let items = [];
+let frame = 0;
 let score = 0;
 let best = 0;
 let gameOver = false;
 let shield = false;
-let lastTime = performance.now();
 
-// Переменные для тайминга спауна, чтобы он зависел от времени, а не от кадров
-let pipeSpawnTimer = 0;
-// Интервал в мс (100 "старых кадров" * 16.67мс/кадр ≈ 1.67 секунды)
-const PIPE_SPAWN_INTERVAL = 100 * 16.67; 
-let itemSpawnTimer = 0;
-// Интервал в мс (200 "старых кадров" * 16.67мс/кадр ≈ 3.33 секунды)
-const ITEM_SPAWN_INTERVAL = 200 * 16.67; 
-  
 const imgHero = new Image();
 imgHero.crossOrigin = 'anonymous';
 let heroReady = false;
@@ -30,215 +38,167 @@ imgHero.onload = () => { heroReady = true; };
 imgHero.onerror = () => { heroBroken = true; };
 imgHero.src = 'hero.png';
 
-const sndJump  = new Audio('jump.mp3');
-const sndWall  = new Audio('wall.mp3');
-const sndBomb  = new Audio('bomb.mp3');
+const sndJump  = new Audio('jump.mp3');
+const sndWall  = new Audio('wall.mp3');
+const sndBomb  = new Audio('bomb.mp3');
 const sndMoney = new Audio('money.mp3');
 const sndHeart = new Audio('heart.mp3');
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 
 function drawCharacter() {
-  const b = bird;
-  ctx.save();
-  ctx.translate(b.x, b.y);
-  // Поворот птицы зависит от ее вертикальной скорости
-  ctx.rotate(b.vy / 15); 
-  const size = b.size * 2;
-  if (!heroBroken && heroReady && imgHero.complete && imgHero.naturalWidth > 0) {
-    try { ctx.drawImage(imgHero, -size, -size, size * 2, size * 2); }
-    catch { drawFallbackAvatar(); }
-  } else drawFallbackAvatar();
-  ctx.restore();
+  const b = bird;
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.vy / 15);
+  const size = b.size * 2;
+  if (!heroBroken && heroReady && imgHero.complete && imgHero.naturalWidth > 0) {
+    try { ctx.drawImage(imgHero, -size, -size, size * 2, size * 2); }
+    catch { drawFallbackAvatar(); }
+  } else drawFallbackAvatar();
+  ctx.restore();
 }
 
 function drawFallbackAvatar(){
-  const b = bird;
-  ctx.fillStyle = '#f2d2b6';
-  ctx.beginPath(); ctx.arc(0, 0, b.size, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#d770ff';
-  ctx.beginPath(); ctx.arc(0, -b.size*0.7, b.size*1.1, Math.PI, 0); ctx.fill();
+  const b = bird;
+  ctx.fillStyle = '#f2d2b6';
+  ctx.beginPath(); ctx.arc(0, 0, b.size, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d770ff';
+  ctx.beginPath(); ctx.arc(0, -b.size*0.7, b.size*1.1, Math.PI, 0); ctx.fill();
 }
 
 function drawPipes() {
-  ctx.fillStyle = '#2ecc71';
-  pipes.forEach(p => {
-    ctx.fillRect(p.x, 0, 60, p.top);
-    ctx.fillRect(p.x, p.top + p.gap, 60, canvas.height);
-  });
+  ctx.fillStyle = '#2ecc71';
+  pipes.forEach(p => {
+    ctx.fillRect(p.x, 0, 60, p.top);
+    ctx.fillRect(p.x, p.top + p.gap, 60, canvas.height);
+  });
 }
 
 function drawItems() {
-  ctx.font = '30px system-ui';
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
-  items.forEach(it => ctx.fillText(it.icon, it.x, it.y));
+  ctx.font = '30px system-ui';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  items.forEach(it => ctx.fillText(it.icon, it.x, it.y));
 }
 
-// ----------------------------------------------------
-// Главная функция обновления, зависящая от дельта-времени
-// ----------------------------------------------------
-function update(dt_ms) {
-  if (gameOver) return;
+function update() {
+  if (gameOver) return;
+  frame++;
+  bird.vy += bird.gravity * 0.4;
+  bird.y += bird.vy * 0.4;
+  if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
 
-  // dt_norm = 1.0, если прошло 16.67мс (60 FPS)
-  // dt_norm = 2.0, если прошло 33.34мс (30 FPS)
-  const dt_norm = dt_ms / 16.67; 
-  
-  // Физика птицы:
-  // Все движения (гравитация, скорость) умножаются на dt_norm,
-  // чтобы птица падала с одинаковой *скоростью* (а не на одинаковые пиксели за кадр)
-  bird.vy += bird.gravity * dt_norm;
-  bird.y += bird.vy * dt_norm;
-  
-  if (bird.y + bird.size > canvas.height || bird.y - bird.size < 0) { play(sndWall); endGame(); }
+  if (frame % 100 === 0) {
+    const top = Math.random() * (canvas.height / 2);
+    pipes.push({ x: canvas.width, top, gap: 190, passed: false });
+  }
 
-  // --- Спаун труб (зависит от времени, а не от кадров) ---
-  pipeSpawnTimer += dt_ms;
-  if (pipeSpawnTimer >= PIPE_SPAWN_INTERVAL) {
-    // Сбрасываем таймер (вычитаем интервал, а не обнуляем,
-    // чтобы не терять "остаток" времени)
-    pipeSpawnTimer -= PIPE_SPAWN_INTERVAL; 
-    const top = Math.random() * (canvas.height / 2);
-    pipes.push({ x: canvas.width, top, gap: 190, passed: false });
-  }
+  // спаун бонусов чаще для ❤️ и 💵
+  if (frame % 200 === 0) {
+    const roll = Math.random();
+    let type;
+    if (roll < 0.4) type = '❤️'; // чаще сердца
+    else if (roll < 0.8) type = '💵'; // чаще деньги
+    else type = '💣';
 
-  // --- Спаун бонусов (зависит от времени) ---
-  itemSpawnTimer += dt_ms;
-  if (itemSpawnTimer >= ITEM_SPAWN_INTERVAL) {
-    itemSpawnTimer -= ITEM_SPAWN_INTERVAL;
-    const roll = Math.random();
-    let type;
-    if (roll < 0.4) type = '❤️'; // чаще сердца
-    else if (roll < 0.8) type = '💵'; // чаще деньги
-    else type = '💣';
+    let x = canvas.width + 140;
+    let y;
+    if (pipes.length) {
+      const last = pipes[pipes.length - 1];
+      const gapCenter = last.top + last.gap / 2;
+      const safeMargin = 50;
+      const minY = Math.max(60, gapCenter - last.gap / 2 + safeMargin);
+      const maxY = Math.min(canvas.height - 80, gapCenter + last.gap / 2 - safeMargin);
+      y = rnd(minY, maxY);
+    } else {
+      y = rnd(100, canvas.height - 180);
+    }
+    items.push({ x, y, icon: type, type, collected: false });
+  }
 
-    let x = canvas.width + 140;
-    let y;
-    if (pipes.length) {
-      const last = pipes[pipes.length - 1];
-      const gapCenter = last.top + last.gap / 2;
-      const safeMargin = 50;
-      const minY = Math.max(60, gapCenter - last.gap / 2 + safeMargin);
-      const maxY = Math.min(canvas.height - 80, gapCenter + last.gap / 2 - safeMargin);
-      y = rnd(minY, maxY);
-    } else {
-      y = rnd(100, canvas.height - 180);
-    }
-    items.push({ x, y, icon: type, type, collected: false });
-  }
-  
-  // Движение труб и предметов (также умножаем на dt_norm)
-  const pipeSpeed = 3.2 * dt_norm; 
-  pipes.forEach(p => (p.x -= pipeSpeed));
-  items.forEach(i => (i.x -= pipeSpeed));
-  
-  pipes = pipes.filter(p => p.x > -70);
-  items = items.filter(i => i.x > -40 && !i.collected);
+  const pipeSpeed = 3.2;
+  pipes.forEach(p => (p.x -= pipeSpeed));
+  items.forEach(i => (i.x -= pipeSpeed));
+  pipes = pipes.filter(p => p.x > -70);
+  items = items.filter(i => i.x > -40 && !i.collected);
 
-  // Коллизии
-  pipes.forEach(p => {
-    const center = p.x + 30;
-    if (!p.passed && center < bird.x) { p.passed = true; score++; }
-    if (bird.x + bird.size > p.x && bird.x - bird.size < p.x + 60) {
-      if (bird.y - bird.size < p.top || bird.y + bird.size > p.top + p.gap) {
-        if (shield) shield = false; else { play(sndWall); endGame(); }
-      }
-    }
-  });
+  pipes.forEach(p => {
+    const center = p.x + 30;
+    if (!p.passed && center < bird.x) { p.passed = true; score++; }
+    if (bird.x + bird.size > p.x && bird.x - bird.size < p.x + 60) {
+      if (bird.y - bird.size < p.top || bird.y + bird.size > p.top + p.gap) {
+        if (shield) shield = false; else { play(sndWall); endGame(); }
+      }
+    }
+  });
 
-  items.forEach(i => {
-    if (Math.abs(bird.x - i.x) < bird.size && Math.abs(bird.y - i.y) < bird.size) {
-      if (i.type === '💣') { play(sndBomb); endGame(); }
-      if (i.type === '💵') { play(sndMoney); score += 3; }
-      if (i.type === '❤️') { play(sndHeart); shield = true; }
-      i.collected = true;
-    }
-  });
+  items.forEach(i => {
+    if (Math.abs(bird.x - i.x) < bird.size && Math.abs(bird.y - i.y) < bird.size) {
+      if (i.type === '💣') { play(sndBomb); endGame(); }
+      if (i.type === '💵') { play(sndMoney); score += 3; }
+      if (i.type === '❤️') { play(sndHeart); shield = true; }
+      i.collected = true;
+    }
+  });
 }
-// ----------------------------------------------------
 
 function drawHUD() {
-  ctx.fillStyle = '#000';
-  ctx.globalAlpha = 0.25; ctx.fillRect(10, 10, 180, 60); ctx.globalAlpha = 1;
-  ctx.fillStyle = '#fff';
-  ctx.font = '20px system-ui';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(`Очки: ${score}`, 20, 40);
-  ctx.fillText(`Лучший: ${best}`, 20, 65);
-  if (shield) {
-    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
-    ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.size * 1.5, 0, Math.PI * 2); ctx.stroke();
-  }
+  ctx.fillStyle = '#000';
+  ctx.globalAlpha = 0.25; ctx.fillRect(10, 10, 180, 60); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px system-ui';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(`Очки: ${score}`, 20, 40);
+  ctx.fillText(`Лучший: ${best}`, 20, 65);
+  if (shield) {
+    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(bird.x, bird.y, bird.size * 1.5, 0, Math.PI * 2); ctx.stroke();
+  }
 }
 
 function draw() {
-  // Очистка экрана должна быть в draw(), а не в loop()
-  ctx.clearRect(0, 0, canvas.width, canvas.height); 
-  drawPipes();
-  drawItems();
-  drawCharacter();
-  drawHUD();
-  if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    const w = Math.min(380, canvas.width - 40);
-    const x = (canvas.width - w) / 2;
-    const y = canvas.height / 2 - 80;
-    ctx.fillRect(x, y, w, 160);
-    ctx.fillStyle = '#fff';
-    ctx.font = '28px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Игра окончена', canvas.width / 2, y + 56);
-    ctx.font = '18px system-ui';
-    ctx.fillText('Нажми для рестарта', canvas.width / 2, y + 100);
-  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawPipes();
+  drawItems();
+  drawCharacter();
+  drawHUD();
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const w = Math.min(380, canvas.width - 40);
+    const x = (canvas.width - w) / 2;
+    const y = canvas.height / 2 - 80;
+    ctx.fillRect(x, y, w, 160);
+    ctx.fillStyle = '#fff';
+    ctx.font = '28px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Игра окончена', canvas.width / 2, y + 56);
+    ctx.font = '18px system-ui';
+    ctx.fillText('Нажми для рестарта', canvas.width / 2, y + 100);
+  }
 }
 
 function endGame() { gameOver = true; best = Math.max(best, score); }
 
-// ----------------------------------------------------
-// Главный игровой цикл (Loop)
-// ----------------------------------------------------
-function loop() {
-  const now = performance.now();
-  // dt_ms = время в миллисекундах, прошедшее с прошлого кадра
-  const dt_ms = now - lastTime; 
-  lastTime = now;
-
-  // Ограничиваем dt_ms, чтобы избежать "взрыва" физики,
-  // если вкладка была неактивна (слишком большой dt_ms)
-  if (dt_ms < 1000) { 
-    update(dt_ms); 
-  }
-  
-  draw();
-  requestAnimationFrame(loop);
-}
-// ----------------------------------------------------
+function loop() { update(); draw(); requestAnimationFrame(loop); }
 
 let interacted = false;
 function primeAudio() {
-  if (!interacted) { [sndJump,sndWall,sndBomb,sndMoney,sndHeart].forEach(s=>{ try{ s.play().then(()=>s.pause()).catch(()=>{}); }catch(_){} }); interacted = true; }
+  if (!interacted) { [sndJump,sndWall,sndBomb,sndMoney,sndHeart].forEach(s=>{ try{ s.play().then(()=>s.pause()).catch(()=>{}); }catch(_){} }); interacted = true; }
 }
 
 function play(snd){ if (interacted) { try { snd.currentTime = 0; snd.play(); } catch(_){} } }
 
 function flap() {
-  primeAudio();
-  if (gameOver) {
-    gameOver = false; pipes = []; items = []; score = 0; bird.y = canvas.height * 0.5; bird.vy = 0; shield = false; 
-    // Сброс таймеров спауна при рестарте
-    pipeSpawnTimer = 0; itemSpawnTimer = 0; 
-    lastTime = performance.now(); // Сброс времени, чтобы избежать большого dt в первом кадре
-    return;
-  }
-  play(sndJump);
-  // Прыжок - это мгновенное изменение скорости, 
-  // его не нужно умножать на dt_norm.
-  bird.vy = bird.lift; 
+  primeAudio();
+  if (gameOver) {
+    gameOver = false; pipes = []; items = []; score = 0; bird.y = canvas.height * 0.5; bird.vy = 0; shield = false; frame = 0; return;
+  }
+  play(sndJump);
+  bird.vy = bird.lift;
 }
 canvas.addEventListener('mousedown', flap);
 canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, { passive:false });
@@ -246,6 +206,7 @@ window.addEventListener('keydown', (e)=>{ if (e.code === 'Space' || e.code === '
 
 function rnd(min, max){ return Math.random() * (max - min) + min; }
 
-// Запускаем игровой цикл
 loop();
 </script>
+</body>
+</html>
